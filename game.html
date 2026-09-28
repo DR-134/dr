@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eco-Restoration: Mundo en Ruinas</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; background-color: #111; color: #4caf50; font-family: 'Courier New', Courier, monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; overflow: auto; }
+        #ui { margin-bottom: 8px; font-size: 15px; font-weight: bold; text-shadow: 0 0 5px #4caf50; letter-spacing: 1px; z-index: 10; color: #fff; text-align:center; }
+        canvas { border: 4px solid #222; background-color: #1a1a1a; box-shadow: 0 0 20px rgba(76, 175, 80, 0.2); display: block; max-width: 96vw; height: auto; image-rendering: pixelated; }
+        .overlay { position: fixed; inset: 0; background: rgba(10, 10, 10, 0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; z-index: 100; padding: 20px; }
+        .overlay.hidden { display: none; }
+        .overlay h1 { font-size: 34px; margin: 0 0 4px 0; color: #8bc34a; text-shadow: 0 0 10px #4caf50; letter-spacing: 2px; }
+        .overlay h2 { margin: 0 0 16px 0; color: #ff9900; letter-spacing: 3px; }
+        .overlay p { max-width: 560px; line-height: 1.5; color: #ccc;}
+        .overlay .controls { color: #888; font-size: 13px; }
+        #progressList, #odsSummary { margin: 10px 0 20px 0; font-size: 13px; text-align: left; max-width: 560px; color: #fff;}
+        #progressList div, #odsSummary div { margin: 6px 0; }
+        .overlay button { background: transparent; border: 2px solid #4caf50; color: #4caf50; font-family: 'Courier New', Courier, monospace; font-size: 15px; padding: 10px 24px; letter-spacing: 2px; cursor: pointer; text-shadow: 0 0 5px #4caf50; transition: all 0.2s ease; margin-top: 6px; }
+        .overlay button:hover { background: rgba(76, 175, 80, 0.2); }
+
+        /* TIENDA DE MEJORAS */
+        #shopScreen { z-index: 200; }
+        .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 650px; margin: 15px 0; text-align: left; }
+        .shop-item { background: rgba(20,20,20,0.8); border: 2px solid #4caf50; padding: 12px; border-radius: 6px; display: flex; flex-direction: column; justify-content: space-between; }
+        .shop-item h3 { margin: 0 0 6px 0; font-size: 15px; color: #ffcc00; }
+        .shop-item p { margin: 0 0 8px 0; font-size: 12px; color: #aaa; }
+        .shop-btn { background: #222; border: 1px solid #4caf50; color: #4caf50; padding: 6px 12px; cursor: pointer; font-family: 'Courier New'; font-size: 13px; font-weight: bold; }
+        .shop-btn:hover { background: #4caf50; color: #000; }
+        .shop-btn:disabled { border-color: #555; color: #555; cursor: not-allowed; background: #111; }
+
+        /* MINIJUEGOS DE MISIONES */
+        #missionScreen { z-index: 200; }
+        #missionHeader { display:flex; gap:24px; margin-bottom:10px; font-size:14px; color:#fff; }
+        #missionArena { position: relative; width: 340px; height: 220px; background: rgba(76,175,80,0.06); border: 2px solid #4caf50; border-radius: 6px; overflow: hidden; margin-bottom: 14px; }
+        #missionTimer { color: #ff9900; font-weight:bold; }
+        #missionProgress { color: #4caf50; font-weight:bold; }
+        .missionPrompt { position:absolute; }
+
+        #pauseBtn { position: fixed; top: 12px; right: 12px; width: 42px; height: 42px; border-radius: 50%; background: rgba(20,20,20,0.55); border: 2px solid rgba(76,175,80,0.6); color: #4caf50; font-size: 18px; cursor: pointer; z-index: 150; opacity: 0.5; transition: opacity 0.2s; display: flex; align-items: center; justify-content: center; }
+        #pauseBtn:hover { opacity: 1; }
+
+        /* INTRO NARRATIVA */
+        #introScreen { z-index: 300; background: #000; }
+        #introText { max-width: 680px; font-size: 17px; line-height: 1.7; color: #4caf50; text-shadow: 0 0 6px rgba(76,175,80,0.6); text-align: left; min-height: 200px; white-space: pre-wrap; }
+        #introCursor { display: inline-block; width: 9px; background: #4caf50; margin-left: 2px; animation: blinkCursor 0.8s steps(1) infinite; }
+        @keyframes blinkCursor { 50% { opacity: 0; } }
+        #introSkip { margin-top: 22px; font-size: 12px; opacity: 0.7; }
+    </style>
+</head>
+<body>
+ 
+    <button id="pauseBtn" title="Pausa">⏸</button>
+    <div id="ui">SALUD: <span id="hp">100</span> | TUERCAS 🔩: <span id="nuts">0</span> | ESTADO: <span id="status">RESTAURA EL MUNDO EN RUINAS</span> | MISIONES: <span id="missionCount">0</span>/<span id="missionTotal">21</span></div>
+    <canvas id="gameCanvas" width="1280" height="720"></canvas>
+
+    <div id="introScreen" class="overlay">
+        <div id="introText"><span id="introTextInner"></span><span id="introCursor">&nbsp;</span></div>
+        <div id="introSkip">click para omitir</div>
+    </div>
+
+    <div id="startScreen" class="overlay hidden">
+        <h1>ECO-RESTORATION</h1>
+        <h2>EL MUNDO EN RUINAS</h2>
+        <p>Eres el último robot restaurador. Explora la ciudad, completa misiones para ganar <strong>Tuercas 🔩</strong>, mejora tu equipo en la tienda del spawn y derrota a los jefes ODS.</p>
+        <p class="controls">WASD para moverte &nbsp;·&nbsp; Mouse para apuntar &nbsp;·&nbsp; Click para disparar &nbsp;·&nbsp; E para interactuar con Misiones y Tienda</p>
+        <div id="progressList"></div>
+        <button id="startBtn">INICIAR RESTAURACIÓN</button>
+    </div>
+
+    <!-- TIENDA DE MEJORAS -->
+    <div id="shopScreen" class="overlay hidden">
+        <h1>TALLER DE MEJORAS</h1>
+        <p>Usa tus Tuercas 🔩 para potenciar los sistemas de tu robot restaurador.</p>
+        <div class="shop-grid">
+            <div class="shop-item">
+                <div><h3>VELOCIDAD DE MOVIMIENTO</h3><p>Nivel: <span id="lvlMove">0</span>/5 (+15% c/u)</p></div>
+                <button class="shop-btn" id="btnMove" onclick="buyUpgrade('move')">Comprar (30 🔩)</button>
+            </div>
+            <div class="shop-item">
+                <div><h3>VELOCIDAD DE ATAQUE</h3><p>Nivel: <span id="lvlAttack">0</span>/5 (+20% cadencia c/u)</p></div>
+                <button class="shop-btn" id="btnAttack" onclick="buyUpgrade('attack')">Comprar (35 🔩)</button>
+            </div>
+            <div class="shop-item">
+                <div><h3>BLINDAJE MÁXIMO (VIDA)</h3><p>Nivel: <span id="lvlHp">0</span>/3 (+30 HP c/u)</p></div>
+                <button class="shop-btn" id="btnHp" onclick="buyUpgrade('hp')">Comprar (50 🔩)</button>
+            </div>
+            <div class="shop-item">
+                <div><h3>BALAS DOBLES</h3><p>Dispara dos proyectiles simultáneos.</p><p style="color:#ffcc00;">Estado: <span id="statDouble">No adquirido</span></p></div>
+                <button class="shop-btn" id="btnDouble" onclick="buyUpgrade('double')">Comprar (150 🔩)</button>
+            </div>
+            <div class="shop-item" style="grid-column: span 2;">
+                <div><h3>MÓDULO BALAS PREDIRIGIDAS (HOMING)</h3><p>Tus proyectiles curvan su trayectoria hacia los enemigos y jefes cercanos.</p><p style="color:#ffcc00;">Estado: <span id="statHoming">No adquirido</span></p></div>
+                <button class="shop-btn" id="btnHoming" onclick="buyUpgrade('homing')">Comprar (250 🔩)</button>
+            </div>
+        </div>
+        <button onclick="closeShop()">VOLVER AL JUEGO</button>
+    </div>
+
+    <div id="deathScreen" class="overlay hidden">
+        <h1 style="color: #ff3366; text-shadow: 0 0 10px #ff3366;">¡ENERGÍA AGOTADA!</h1>
+        <p>La contaminación ha dañado tu chasis. Reiniciando en la zona segura.</p>
+        <button id="respawnBtn" style="border-color: #ff3366; color: #ff3366;">REINICIAR SISTEMAS</button>
+    </div>
+
+    <div id="victoryScreen" class="overlay hidden">
+        <h1>¡EL MUNDO COMIENZA A SANAR!</h1>
+        <p>Has purificado todas las zonas y restaurado el equilibrio.</p>
+        <div id="odsSummary"></div>
+        <button id="restartBtn">VOLVER A JUGAR</button>
+    </div>
+
+    <div id="missionScreen" class="overlay hidden">
+        <h1 id="missionTitle" style="font-size:22px;">MISIÓN</h1>
+        <p id="missionDesc">Descripción de la misión</p>
+        <div id="missionHeader">
+            <div>PROGRESO: <span id="missionProgress">0 / 6</span></div>
+            <div>TIEMPO: <span id="missionTimer">9s</span></div>
+        </div>
+        <div id="missionArena"></div>
+        <p class="controls">Completa el objetivo antes de que se acabe el tiempo</p>
+    </div>
+
+    <script>
+
+      
+        const canvas = document.getElementById("gameCanvas"); const ctx = canvas.getContext("2d"); ctx.imageSmoothingEnabled = false;
+
+         // Cargar la textura de la Zona 1
+        const imgZona1 = new Image();
+        imgZona1.src = "textura_zona1.png";
+
+        let gameState = "intro"; let hurtCooldown = 0; let gameOverSoundPlayed = false;
+        
+        // Moneda y Tienda
+        let nuts = 0;
+        let upgrades = { move: 0, attack: 0, hp: 0, double: false, homing: false };
+        const upgradeCosts = {
+            move: [30, 60, 100, 150, 250],
+            attack: [35, 70, 120, 180, 280],
+            hp: [50, 100, 200],
+            double: 150,
+            homing: 250
+        };
+
+        const odsData = {
+            6: { name: "Agua Limpia y Saneamiento", desc: "Purificaste las aguas tóxicas y reparaste las fugas sanitarias." },
+            7: { name: "Energía Asequible", desc: "Detuviste la quema de combustibles y limpiaste el smog de la zona industrial." },
+            13: { name: "Acción por el Clima", desc: "Apagaste los incendios forestales y frenaste el calentamiento extremo." },
+            14: { name: "Vida Submarina", desc: "Limpiaste el lecho marino seco de basura y microplásticos." },
+            15: { name: "Ecosistemas Terrestres", desc: "Detuviste la desertificación y preparaste la tierra para el nuevo pasto." }
+        };
+        const stageToODS = { 1: 6, 2: 7, 3: 13, 4: 14, 5: 15 }; let completedODS = new Set();
+
+        function saveProgress() { try { localStorage.setItem("ecoCyberpunkProgress", JSON.stringify([...completedODS])); localStorage.setItem("ecoCyberpunkNuts", nuts); localStorage.setItem("ecoCyberpunkUpgrades", JSON.stringify(upgrades)); } catch (e) {} }
+        function loadProgress() { 
+            try { 
+                const raw = localStorage.getItem("ecoCyberpunkProgress"); if (raw) JSON.parse(raw).forEach(n => completedODS.add(n)); 
+                const savedNuts = localStorage.getItem("ecoCyberpunkNuts"); if (savedNuts) nuts = parseInt(savedNuts);
+                const savedUp = localStorage.getItem("ecoCyberpunkUpgrades"); if (savedUp) upgrades = JSON.parse(savedUp);
+                document.getElementById("nuts").innerText = nuts;
+            } catch (e) {} 
+        }
+        loadProgress();
+
+        let audioCtx = null; function getAudioCtx() { if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } return audioCtx; }
+        function playTone(freq, duration, type, volume) { const ac = getAudioCtx(); if (!ac) return; const osc = ac.createOscillator(); const gain = ac.createGain(); osc.type = type || "square"; osc.frequency.value = freq; gain.gain.value = volume || 0.15; osc.connect(gain); gain.connect(ac.destination); osc.start(); gain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + duration); osc.stop(ac.currentTime + duration); }
+        function sfxShoot() { playTone(880, 0.06, "square", 0.05); } function sfxHit() { playTone(220, 0.07, "sawtooth", 0.07); } function sfxHurt() { playTone(120, 0.15, "sawtooth", 0.14); } function sfxBossDown() { playTone(440, 0.15, "triangle", 0.2); setTimeout(() => playTone(660, 0.25, "triangle", 0.2), 150); } function sfxDefeat() { playTone(180, 0.4, "sawtooth", 0.18); setTimeout(() => playTone(120, 0.5, "sawtooth", 0.18), 200); } function sfxVictory() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => playTone(f, 0.3, "triangle", 0.2), i * 180)); } function sfxMissionWin() { playTone(880, 0.1, "triangle", 0.15); setTimeout(() => playTone(1100, 0.15, "triangle", 0.15), 120); } function sfxMissionTick() { playTone(700, 0.05, "square", 0.06); } function sfxNut() { playTone(1200, 0.08, "triangle", 0.2); }
+
+        const patterns = {};
+        function createPat(w, h, renderFunc) {
+            let c = document.createElement('canvas'); c.width = w; c.height = h;
+            let cx = c.getContext('2d'); renderFunc(cx, w, h);
+            return ctx.createPattern(c, 'repeat');
+        }
+        function initPatterns() {
+            patterns.cityGround = createPat(200, 200, (c, w, h) => {
+                c.fillStyle = "#2a2a2a"; c.fillRect(0,0,w,h);
+                c.fillStyle = "#242424"; for (let i=0;i<10;i++) for(let j=0;j<10;j++) if((i+j)%2===0) c.fillRect(i*20,j*20,20,20);
+                c.fillStyle = "#1c1c1c"; for(let i=0; i<40; i++) c.fillRect(Math.random()*w, Math.random()*h, 6+Math.random()*20, 2+Math.random()*6);
+                c.strokeStyle = "rgba(0,0,0,0.4)"; c.lineWidth=2; for(let i=0;i<8;i++){c.beginPath(); c.moveTo(Math.random()*w,0); c.lineTo(Math.random()*w,h); c.stroke();}
+            });
+            patterns.waterGround = createPat(260, 260, (c, w, h) => {
+                c.fillStyle = "#3a2f24"; c.fillRect(0,0,w,h);
+                c.fillStyle = "#332619"; for(let i=0;i<25;i++) c.fillRect(Math.random()*w, Math.random()*h, 8, 8);
+                c.strokeStyle = "rgba(100, 255, 50, 0.35)"; c.lineWidth = 2;
+                for(let i=0; i<10; i++) { c.beginPath(); c.arc(Math.random()*w, Math.random()*h, 10+Math.random()*30, 0, Math.PI*2); c.stroke(); }
+                c.fillStyle = "rgba(80,200,255,0.15)"; for(let i=0;i<6;i++) c.fillRect(Math.random()*w, Math.random()*h, 30, 4);
+            });
+            patterns.climateGround = createPat(220, 220, (c, w, h) => {
+                c.fillStyle = "#4a1c0d"; c.fillRect(0,0,w,h);
+                c.fillStyle = "#1a0803"; for(let i=0; i<40; i++) { c.beginPath(); c.arc(Math.random()*w, Math.random()*h, 2+Math.random()*10, 0, Math.PI*2); c.fill(); }
+                c.fillStyle = "#802b00"; for(let i=0; i<12; i++) c.fillRect(Math.random()*w, Math.random()*h, 24, 3);
+                c.fillStyle = "rgba(255,120,0,0.12)"; for(let i=0;i<6;i++){c.beginPath(); c.arc(Math.random()*w, Math.random()*h, 20, 0, Math.PI*2); c.fill();}
+            });
+            patterns.energyGround = createPat(200, 200, (c, w, h) => {
+                c.fillStyle = "#1c1c1c"; c.fillRect(0,0,w,h);
+                c.fillStyle = "#141414"; for (let i=0;i<10;i++) c.fillRect(0, i*20, w, 1);
+                c.fillStyle = "#0a0a0a"; for(let i=0; i<12; i++) { c.beginPath(); c.arc(Math.random()*w, Math.random()*h, 15+Math.random()*25, 0, Math.PI*2); c.fill(); }
+                c.fillStyle = "rgba(255,204,0,0.08)"; for(let i=0;i<5;i++) c.fillRect(Math.random()*w, Math.random()*h, 40, 3);
+            });
+            patterns.marineGround = createPat(240, 240, (c, w, h) => {
+                let grad = c.createLinearGradient(0, 0, 0, h);
+                grad.addColorStop(0, "#0b3d55"); grad.addColorStop(1, "#082a3e");
+                c.fillStyle = grad; c.fillRect(0,0,w,h);
+                c.strokeStyle = "rgba(120,220,255,0.25)"; c.lineWidth = 3;
+                for(let i=0; i<8; i++) { c.beginPath(); let yy = Math.random()*h; c.moveTo(0, yy); c.bezierCurveTo(w*0.25, yy-14, w*0.75, yy+14, w, yy); c.stroke(); }
+                c.fillStyle = "rgba(180,240,255,0.35)";
+                for(let i=0; i<22; i++) { let bx = Math.random()*w, by = Math.random()*h, r = 1.5+Math.random()*3.5; c.beginPath(); c.arc(bx, by, r, 0, Math.PI*2); c.fill(); }
+                c.fillStyle = "rgba(30,90,110,0.5)";
+                for(let i=0; i<10; i++) c.fillRect(Math.random()*w, Math.random()*h, 4, 4);
+            });
+            patterns.earthGround = createPat(200, 200, (c, w, h) => {
+                c.fillStyle = "#7a5c3a"; c.fillRect(0,0,w,h); c.fillStyle = "#947653";
+                for(let i=0; i<30; i++) c.fillRect(Math.random()*w, Math.random()*h, 10+Math.random()*20, 2);
+                c.fillStyle = "rgba(60,40,20,0.2)"; for(let i=0;i<10;i++) c.fillRect(Math.random()*w, Math.random()*h, 4,4);
+            });
+        }
+        initPatterns();
+
+        const worldWidth = 5000; const worldHeight = 5000;
+        let player = { x: 2450, y: 2450, width: 42, height: 44, hp: 100, maxHp: 100, angle: -Math.PI / 2 };
+        
+        function getPlayerSpeed() { return 3.2 * (1 + upgrades.move * 0.15); }
+        function getMaxPlayerHp() { return 100 + upgrades.hp * 30; }
+
+        let keys = {}; let mouse = { x: 0, y: 0, down: false };
+        let bullets = [], enemyBullets = [], laserHazards = [], slashHazards = [], shockwaves = [];
+        let currentStage = 0;
+ 
+        const mapGridCols = 100; const mapGridRows = 100;
+        let exploredCells = Array(mapGridRows).fill(0).map(() => Array(mapGridCols).fill(false));
+ 
+        window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; if (e.key === "Escape") togglePause(); if (e.key.toLowerCase() === "e") checkShopInteract(); });
+        window.addEventListener("keyup", (e) => keys[e.key.toLowerCase()] = false);
+
+        let stateBeforePause = null;
+        function togglePause() {
+            if (gameState === "paused") { gameState = stateBeforePause || "playing"; document.getElementById("pauseBtn").innerText = "⏸"; }
+            else if (gameState === "playing") { stateBeforePause = gameState; gameState = "paused"; document.getElementById("pauseBtn").innerText = "▶"; }
+        }
+        document.getElementById("pauseBtn").addEventListener("click", togglePause);
+        canvas.addEventListener("mousemove", (e) => { const rect = canvas.getBoundingClientRect(); const scaleX = canvas.width / rect.width; const scaleY = canvas.height / rect.height; mouse.x = (e.clientX - rect.left) * scaleX; mouse.y = (e.clientY - rect.top) * scaleY; });
+        canvas.addEventListener("mousedown", () => mouse.down = true); canvas.addEventListener("mouseup", () => mouse.down = false);
+ 
+        const doorODS6  = { x: 515, y: 515, width: 50, height: 50 };   const doorODS7  = { x: 4355, y: 515, width: 50, height: 50 };
+        const doorODS13 = { x: 515, y: 4355, width: 50, height: 50 };  const doorODS14 = { x: 4355, y: 4355, width: 50, height: 50 };
+        const doorODS15 = { x: 2435, y: 515, width: 50, height: 50 };
+        const shopStation = { x: 2435, y: 2380, width: 50, height: 50 };
+
+        let lobbyWalls = [
+            {x: 0, y: 0, width: 5000, height: 100, zone: "border"}, {x: 0, y: 4900, width: 5000, height: 100, zone: "border"},
+            {x: 0, y: 0, width: 100, height: 5000, zone: "border"}, {x: 4900, y: 0, width: 100, height: 5000, zone: "border"}
+        ];
+
+        const cellSize = 320; const blockSize = 240; const totalCells = 15;
+
+        for (let cX = 0; cX < totalCells; cX++) {
+            for (let cY = 0; cY < totalCells; cY++) {
+                let x = 100 + cX * cellSize; let y = 100 + cY * cellSize;
+                if (cX >= 6 && cX <= 8 && cY >= 6 && cY <= 8) continue;
+                if ((cX===1&&cY===1) || (cX===13&&cY===1) || (cX===1&&cY===13) || (cX===13&&cY===13) || (cX===7&&cY===1)) continue;
+
+                let magicNumber = (cX * 17 + cY * 31) % 100;
+                let zone = "neutral";
+                if (cX >= 5 && cX <= 9 && cY < 6) zone = "ODS15"; else if (cX < 7 && cY < 7) zone = "ODS6"; else if (cX >= 7 && cY < 7) zone = "ODS7"; else if (cX < 7 && cY >= 7) zone = "ODS13"; else if (cX >= 7 && cY >= 7) zone = "ODS14";
+
+                if (zone === "ODS6") {
+                    if (magicNumber > 50) lobbyWalls.push({x: x, y: y, width: blockSize, height: blockSize, zone: zone});
+                    else lobbyWalls.push({x: x + 40, y: y + 40, width: blockSize - 80, height: blockSize - 80, zone: zone});
+                } else if (zone === "ODS7") {
+                    if (magicNumber < 50) lobbyWalls.push({x: x, y: y + 60, width: blockSize, height: blockSize - 120, zone: zone});
+                    else lobbyWalls.push({x: x + 60, y: y, width: blockSize - 120, height: blockSize, zone: zone});
+                } else if (zone === "ODS13") {
+                    lobbyWalls.push({x: x, y: y, width: 100, height: 100, zone: zone});
+                    if (magicNumber > 30) lobbyWalls.push({x: x + 140, y: y + 140, width: 100, height: 100, zone: zone});
+                    if (magicNumber < 70) lobbyWalls.push({x: x + 140, y: y, width: 100, height: 100, zone: zone});
+                    if (magicNumber > 50) lobbyWalls.push({x: x, y: y + 140, width: 100, height: 100, zone: zone});
+                } else if (zone === "ODS14") {
+                    if (magicNumber < 35) lobbyWalls.push({x: x + 20, y: y + 20, width: 200, height: 200, zone: zone});
+                } else if (zone === "ODS15") {
+                    lobbyWalls.push({x: x, y: y, width: 105, height: 105, zone: zone}); lobbyWalls.push({x: x + 135, y: y, width: 105, height: 105, zone: zone});
+                    lobbyWalls.push({x: x, y: y + 135, width: 105, height: 105, zone: zone}); lobbyWalls.push({x: x + 135, y: y + 135, width: 105, height: 105, zone: zone});
+                }
+            }
+        }
+
+        // SISTEMA DE MISIONES
+        function isSpotClear(x, y, w, h) {
+            w = w || 40; h = h || 40;
+            for (let wall of lobbyWalls) { if (checkRectCollision(x, y, w, h, wall.x, wall.y, wall.width, wall.height)) return false; }
+            return true;
+        }
+        function findClearSpot(targetX, targetY) {
+            if (isSpotClear(targetX - 20, targetY - 20)) return { x: targetX, y: targetY };
+            for (let r = 20; r < 500; r += 20) {
+                for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
+                    let x = targetX + Math.cos(a) * r, y = targetY + Math.sin(a) * r;
+                    if (x > 160 && y > 160 && x < worldWidth - 160 && y < worldHeight - 160 && isSpotClear(x - 20, y - 20)) return { x, y };
+                }
+            }
+            return { x: targetX, y: targetY };
+        }
+        function makeMission(zone, targetX, targetY, icon, color, title, desc, type, decoyIcon) {
+            let spot = findClearSpot(targetX, targetY);
+            return { zone, x: spot.x, y: spot.y, icon, color, title, desc, type: type || "click", decoyIcon: decoyIcon || "❌", completed: false, cooldown: 0 };
+        }
+
+        let missions = [
+            makeMission("ODS6", 400, 700, "🔧", "#00e5ff", "Reparar tubería con fuga", "Haz click en la fuga para sellarla antes de que se acabe el tiempo.", "click"),
+            makeMission("ODS6", 900, 400, "🚮", "#00e5ff", "Recoger basura del río", "Atrapa solo la basura, evita a los peces.", "whack", "🐟"),
+            makeMission("ODS6", 1400, 900, "🚰", "#00e5ff", "Cerrar válvula tóxica", "Detén la aguja cuando pase por la zona verde.", "reaction"),
+            makeMission("ODS6", 600, 1500, "💧", "#00e5ff", "Filtrar agua contaminada", "Haz click repetidamente para activar el filtro.", "mash"),
+            makeMission("ODS7", 2700, 400, "💨", "#ffcc00", "Apagar generador de humo", "Haz click repetidamente para apagarlo.", "mash"),
+            makeMission("ODS7", 3200, 900, "🔆", "#ffcc00", "Instalar panel solar", "Detén la aguja cuando pase por la zona verde.", "reaction"),
+            makeMission("ODS7", 3800, 600, "🛢️", "#ffcc00", "Sellar fuga de combustible", "Haz click en la fuga antes de que se acabe el tiempo.", "click"),
+            makeMission("ODS7", 2900, 1500, "⚙️", "#ffcc00", "Reparar turbina eólica", "Atrapa solo los engranes, evita el fuego.", "whack", "🔥"),
+            makeMission("ODS13", 400, 3000, "🔥", "#ff4d4d", "Apagar incendio forestal", "Haz click repetidamente para apagar las llamas.", "mash"),
+            makeMission("ODS13", 900, 3600, "🌱", "#ff4d4d", "Sembrar árboles", "Haz click repetidamente para plantar.", "mash"),
+            makeMission("ODS13", 1400, 3000, "🗑️", "#ff4d4d", "Recoger basura quemada", "Haz click en la basura antes de que se acabe el tiempo.", "click"),
+            makeMission("ODS13", 600, 4200, "🐿️", "#ff4d4d", "Rescatar animales del fuego", "Atrapa solo a los animales, evita el fuego.", "whack", "🔥"),
+            makeMission("ODS14", 2700, 2700, "🧴", "#7b68ee", "Recoger microplásticos", "Haz click en los microplásticos antes de que se hundan.", "click"),
+            makeMission("ODS14", 3200, 3200, "🐟", "#7b68ee", "Liberar pez de la red", "Haz click repetidamente para romper la red.", "mash"),
+            makeMission("ODS14", 3800, 2900, "🛢️", "#7b68ee", "Sellar derrame de petróleo", "Detén la aguja cuando pase por la zona verde.", "reaction"),
+            makeMission("ODS14", 2900, 4000, "🗑️", "#7b68ee", "Limpiar fondo marino", "Atrapa solo la basura plástica, evita dañar el coral.", "whack", "🪸"),
+            makeMission("ODS15", 1900, 700, "🐾", "#8bc34a", "Liberar animales atrapados", "Atrapa solo a los animales, evita las trampas.", "whack", "🪤"),
+            makeMission("ODS15", 2400, 900, "🏹", "#8bc34a", "Atrapar cazador furtivo", "Haz click en el cazador antes de que escape.", "click"),
+            makeMission("ODS15", 2900, 700, "🌾", "#8bc34a", "Sembrar pasto nuevo", "Haz click repetidamente para sembrar.", "mash"),
+            makeMission("ODS15", 2000, 1300, "🌳", "#8bc34a", "Reforestar zona árida", "Haz click repetidamente para plantar árboles.", "mash"),
+            makeMission("ODS15", 2700, 1500, "🧱", "#8bc34a", "Reparar cerca protectora", "Detén la aguja cuando pase por la zona verde.", "reaction"),
+
+            // ---- NUEVAS MISIONES ----
+            makeMission("ODS13", 1100, 3300, "🗑️", "#ff4d4d", "Atrapar la basura antes de que caiga", "La basura cae del cielo: atrápala con click antes de que toque el suelo de la zona quemada.", "falling"),
+            makeMission("ODS15", 1200, 1100, "🚒", "#8bc34a", "Camión de rescate animal", "Detén el camión justo cuando esté junto al animal en llamas para rescatarlo.", "truck"),
+            makeMission("ODS15", 2200, 500, "🏹", "#8bc34a", "Ahuyentar cazadores furtivos", "Haz click sobre cada cazador para espantarlo antes de que se acabe el tiempo.", "click"),
+            makeMission("ODS6", 1000, 1100, "🔧", "#00e5ff", "Tapar todas las fugas de agua", "Sella las fugas de agua que aparecen por toda la tubería antes de que se acabe el tiempo.", "whack", "🐠"),
+            makeMission("ODS7", 3500, 1200, "🏭", "#ffcc00", "Reemplazar fábricas por aerogeneradores", "Haz click en cada fábrica y luego en el aerogenerador que aparezca para sustituirla.", "swap"),
+            makeMission("ODS7", 3100, 400, "🌀", "#ffcc00", "Construir aerogenerador", "Haz click repetidamente para terminar de construir el aerogenerador limpio.", "mash"),
+            makeMission("ODS14", 3500, 3500, "🐢", "#7b68ee", "Liberar a la tortuga atrapada", "Haz click repetidamente para cortar la red y liberar a la tortuga.", "mash")
+        ];
+        document.getElementById("missionTotal").innerText = missions.length;
+
+        let activeMission = null;
+        let missionState = { hits: 0, target: 6, timeLeft: 9, timer: null, extra: {} };
+
+        function checkMissionTrigger() {
+            if (gameState !== "playing" || currentStage !== 0) return;
+            for (let m of missions) {
+                if (m.completed || m.cooldown > 0) continue;
+                if (checkRectCollision(player.x, player.y, player.width, player.height, m.x - 26, m.y - 26, 52, 52)) { startMission(m); return; }
+            }
+        }
+        function updateMissionCooldowns() { missions.forEach(m => { if (m.cooldown > 0) m.cooldown--; }); }
+
+        function checkShopInteract() {
+            if (gameState !== "playing" || currentStage !== 0) return;
+            if (checkRectCollision(player.x, player.y, player.width, player.height, shopStation.x - 10, shopStation.y - 10, shopStation.width + 20, shopStation.height + 20)) {
+                openShop();
+            }
+        }
+
+        function openShop() {
+            gameState = "shop";
+            updateShopUI();
+            document.getElementById("shopScreen").classList.remove("hidden");
+        }
+        function closeShop() {
+            document.getElementById("shopScreen").classList.add("hidden");
+            gameState = "playing";
+        }
+
+        function updateShopUI() {
+            document.getElementById("lvlMove").innerText = upgrades.move;
+            document.getElementById("lvlAttack").innerText = upgrades.attack;
+            document.getElementById("lvlHp").innerText = upgrades.hp;
+            
+            const btnM = document.getElementById("btnMove");
+            if (upgrades.move >= 5) { btnM.innerText = "MAX"; btnM.disabled = true; } 
+            else { btnM.innerText = `Comprar (${upgradeCosts.move[upgrades.move]} 🔩)`; btnM.disabled = nuts < upgradeCosts.move[upgrades.move]; }
+
+            const btnA = document.getElementById("btnAttack");
+            if (upgrades.attack >= 5) { btnA.innerText = "MAX"; btnA.disabled = true; } 
+            else { btnA.innerText = `Comprar (${upgradeCosts.attack[upgrades.attack]} 🔩)`; btnA.disabled = nuts < upgradeCosts.attack[upgrades.attack]; }
+
+            const btnH = document.getElementById("btnHp");
+            if (upgrades.hp >= 3) { btnH.innerText = "MAX"; btnH.disabled = true; } 
+            else { btnH.innerText = `Comprar (${upgradeCosts.hp[upgrades.hp]} 🔩)`; btnH.disabled = nuts < upgradeCosts.hp[upgrades.hp]; }
+
+            const btnD = document.getElementById("btnDouble");
+            if (upgrades.double) { document.getElementById("statDouble").innerText = "Adquirido"; btnD.innerText = "MAX"; btnD.disabled = true; } 
+            else { btnD.disabled = nuts < upgradeCosts.double; }
+
+            const btnHom = document.getElementById("btnHoming");
+            if (upgrades.homing) { document.getElementById("statHoming").innerText = "Adquirido"; btnHom.innerText = "MAX"; btnHom.disabled = true; } 
+            else { btnHom.disabled = nuts < upgradeCosts.homing; }
+        }
+
+        function buyUpgrade(type) {
+            if (type === "move" && upgrades.move < 5 && nuts >= upgradeCosts.move[upgrades.move]) {
+                nuts -= upgradeCosts.move[upgrades.move]; upgrades.move++; sfxNut();
+            } else if (type === "attack" && upgrades.attack < 5 && nuts >= upgradeCosts.attack[upgrades.attack]) {
+                nuts -= upgradeCosts.attack[upgrades.attack]; upgrades.attack++; sfxNut();
+            } else if (type === "hp" && upgrades.hp < 3 && nuts >= upgradeCosts.hp[upgrades.hp]) {
+                nuts -= upgradeCosts.hp[upgrades.hp]; upgrades.hp++; player.maxHp = getMaxPlayerHp(); player.hp = player.maxHp; document.getElementById("hp").innerText = player.hp; sfxNut();
+            } else if (type === "double" && !upgrades.double && nuts >= upgradeCosts.double) {
+                nuts -= upgradeCosts.double; upgrades.double = true; sfxNut();
+            } else if (type === "homing" && !upgrades.homing && nuts >= upgradeCosts.homing) {
+                nuts -= upgradeCosts.homing; upgrades.homing = true; sfxNut();
+            }
+            document.getElementById("nuts").innerText = nuts;
+            saveProgress();
+            updateShopUI();
+        }
+
+        function clearMissionExtras() {
+            if (missionState.extra.interval) clearInterval(missionState.extra.interval);
+            if (missionState.extra.popTimeout) clearTimeout(missionState.extra.popTimeout);
+            missionState.extra = {};
+        }
+
+        function startMission(m) {
+            activeMission = m; gameState = "minigame";
+            document.getElementById("missionTitle").innerText = m.title;
+            document.getElementById("missionTitle").style.color = m.color;
+            document.getElementById("missionDesc").innerText = m.desc;
+            document.getElementById("missionScreen").classList.remove("hidden");
+            missionState = { hits: 0, target: 6, timeLeft: 9, timer: null, extra: {} };
+            const arena = document.getElementById("missionArena"); arena.innerHTML = "";
+            if (m.type === "mash") initMashMission(arena, m);
+            else if (m.type === "reaction") initReactionMission(arena, m);
+            else if (m.type === "whack") initWhackMission(arena, m);
+            else if (m.type === "falling") initFallingMission(arena, m);
+            else if (m.type === "truck") initTruckMission(arena, m);
+            else if (m.type === "swap") initSwapMission(arena, m);
+            else initClickMission(arena, m);
+            document.getElementById("missionProgress").innerText = `0 / ${missionState.target}`;
+            document.getElementById("missionTimer").innerText = missionState.timeLeft + "s";
+            missionState.timer = setInterval(missionTick, 1000);
+        }
+
+        function initClickMission(arena, m) {
+            missionState.target = 6;
+            const t = document.createElement("div");
+            t.style.cssText = "position:absolute;width:50px;height:50px;font-size:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;filter:drop-shadow(0 0 6px " + m.color + ");";
+            t.innerText = m.icon; arena.appendChild(t);
+            function move() { const maxX = Math.max(10, arena.clientWidth - 50), maxY = Math.max(10, arena.clientHeight - 50); t.style.left = Math.random() * maxX + "px"; t.style.top = Math.random() * maxY + "px"; }
+            move();
+            t.addEventListener("click", () => { if (gameState !== "minigame") return; missionState.hits++; sfxMissionTick(); document.getElementById("missionProgress").innerText = `${missionState.hits} / ${missionState.target}`; if (missionState.hits >= missionState.target) endMission(true); else move(); });
+        }
+
+        function initMashMission(arena, m) {
+            missionState.target = 20;
+            arena.innerHTML = `<div style="text-align:center;"><div id="mashIcon" style="font-size:60px;cursor:pointer;user-select:none;">${m.icon}</div><div style="width:260px;height:18px;background:#222;border:2px solid ${m.color};border-radius:9px;overflow:hidden;margin-top:10px;"><div id="mashBar" style="height:100%;width:0%;background:${m.color};"></div></div></div>`;
+            const icon = document.getElementById("mashIcon");
+            icon.addEventListener("click", () => {
+                if (gameState !== "minigame") return; missionState.hits++; sfxMissionTick();
+                icon.style.transform = "scale(1.15)"; setTimeout(() => icon.style.transform = "scale(1)", 60);
+                const bar = document.getElementById("mashBar"); if (bar) bar.style.width = Math.min(100, (missionState.hits / missionState.target) * 100) + "%";
+                document.getElementById("missionProgress").innerText = `${missionState.hits} / ${missionState.target}`;
+                if (missionState.hits >= missionState.target) endMission(true);
+            });
+        }
+
+        function initReactionMission(arena, m) {
+            missionState.target = 3;
+            arena.innerHTML = `<div style="text-align:center;width:100%;"><div style="font-size:30px;">${m.icon}</div><div style="position:relative;width:280px;height:26px;background:#222;border:2px solid ${m.color};border-radius:6px;margin:10px auto;overflow:hidden;"><div style="position:absolute;top:0;left:40%;width:20%;height:100%;background:rgba(76,175,80,0.45);"></div><div id="reactNeedle" style="position:absolute;top:0;left:0;width:4px;height:100%;background:${m.color};"></div></div><button id="reactBtn" style="margin-top:8px;background:transparent;border:2px solid ${m.color};color:${m.color};font-family:'Courier New';font-size:15px;padding:8px 20px;cursor:pointer;">DETENER</button></div>`;
+            missionState.extra.pos = 0; missionState.extra.dir = 1;
+            missionState.extra.interval = setInterval(() => {
+                if (gameState !== "minigame") return;
+                missionState.extra.pos += missionState.extra.dir * 3.2;
+                if (missionState.extra.pos >= 100 || missionState.extra.pos <= 0) missionState.extra.dir *= -1;
+                const needle = document.getElementById("reactNeedle"); if (needle) needle.style.left = missionState.extra.pos + "%";
+            }, 30);
+            document.getElementById("reactBtn").addEventListener("click", () => {
+                if (gameState !== "minigame") return;
+                const pos = missionState.extra.pos;
+                if (pos >= 38 && pos <= 62) { missionState.hits++; sfxMissionTick(); document.getElementById("missionProgress").innerText = `${missionState.hits} / ${missionState.target}`; if (missionState.hits >= missionState.target) endMission(true); }
+                else { playTone(200, 0.08, "sawtooth", 0.08); }
+            });
+        }
+
+        function initWhackMission(arena, m) {
+            missionState.target = 7;
+            const holesCount = 6; let html = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:6px;">`;
+            for (let i = 0; i < holesCount; i++) html += `<div class="whackHole" style="width:80px;height:60px;background:#1a1a1a;border:2px solid ${m.color};border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:26px;cursor:pointer;"></div>`;
+            html += `</div>`; arena.innerHTML = html;
+            const holes = arena.querySelectorAll(".whackHole");
+            function popup() {
+                if (gameState !== "minigame") return;
+                const idx = Math.floor(Math.random() * holesCount); const isDecoy = Math.random() < 0.4;
+                holes[idx].innerText = isDecoy ? m.decoyIcon : m.icon; holes[idx].dataset.decoy = isDecoy ? "1" : "0";
+                if (missionState.extra.popTimeout) clearTimeout(missionState.extra.popTimeout);
+                missionState.extra.popTimeout = setTimeout(() => { holes[idx].innerText = ""; }, 700);
+            }
+            holes.forEach(h => h.addEventListener("click", () => {
+                if (gameState !== "minigame" || !h.innerText) return;
+                if (h.dataset.decoy === "1") {
+                    playTone(180, 0.08, "sawtooth", 0.08);
+                    missionState.timeLeft = Math.max(1, missionState.timeLeft - 1);
+                    document.getElementById("missionTimer").innerText = missionState.timeLeft + "s";
+                } else {
+                    missionState.hits++; sfxMissionTick();
+                    document.getElementById("missionProgress").innerText = `${missionState.hits} / ${missionState.target}`;
+                    if (missionState.hits >= missionState.target) { endMission(true); return; }
+                }
+                h.innerText = "";
+            }));
+            missionState.extra.interval = setInterval(popup, 550); popup();
+        }
+
+        // NUEVO MINIJUEGO: atrapar objetos que caen antes de que toquen el suelo
+        function initFallingMission(arena, m) {
+            missionState.target = 10;
+            missionState.extra.missed = 0;
+            arena.style.position = "relative";
+            missionState.extra.interval = setInterval(() => {
+                if (gameState !== "minigame") return;
+                const el = document.createElement("div");
+                const arenaW = arena.clientWidth || 340;
+                el.innerText = m.icon;
+                el.style.cssText = `position:absolute; top:-30px; left:${Math.random() * (arenaW - 40)}px; font-size:28px; cursor:pointer; filter:drop-shadow(0 0 6px ${m.color});`;
+                arena.appendChild(el);
+                let topPos = -30;
+                const fallInterval = setInterval(() => {
+                    topPos += 4.5;
+                    el.style.top = topPos + "px";
+                    if (topPos > (arena.clientHeight || 220)) {
+                        clearInterval(fallInterval);
+                        if (el.parentNode) el.parentNode.removeChild(el);
+                    }
+                }, 30);
+                el.addEventListener("click", () => {
+                    if (gameState !== "minigame") return;
+                    clearInterval(fallInterval);
+                    if (el.parentNode) el.parentNode.removeChild(el);
+                    missionState.hits++; sfxMissionTick();
+                    document.getElementById("missionProgress").innerText = `${missionState.hits} / ${missionState.target}`;
+                    if (missionState.hits >= missionState.target) endMission(true);
+                });
+            }, 650);
+        }
+
+        // NUEVO MINIJUEGO: camión de rescate - detener el camión junto al animal
+        function initTruckMission(arena, m) {
+            missionState.target = 4;
+            arena.innerHTML = `<div style="text-align:center;width:100%;"><div style="position:relative;width:300px;height:50px;background:#1a1a1a;border:2px solid ${m.color};border-radius:6px;margin:14px auto;overflow:hidden;"><div id="truckAnimal" style="position:absolute;top:10px;left:220px;font-size:26px;">🔥🐾</div><div id="truckIcon" style="position:absolute;top:6px;left:0px;font-size:32px;">🚒</div></div><button id="truckBtn" style="background:transparent;border:2px solid ${m.color};color:${m.color};font-family:'Courier New';font-size:15px;padding:8px 20px;cursor:pointer;">RESCATAR</button></div>`;
+            missionState.extra.pos = 0; missionState.extra.dir = 1;
+            missionState.extra.interval = setInterval(() => {
+                if (gameState !== "minigame") return;
+                missionState.extra.pos += missionState.extra.dir * 4.2;
+                if (missionState.extra.pos >= 260 || missionState.extra.pos <= 0) missionState.extra.dir *= -1;
+                const truck = document.getElementById("truckIcon"); if (truck) truck.style.left = missionState.extra.pos + "px";
+            }, 30);
+            document.getElementById("truckBtn").addEventListener("click", () => {
+                if (gameState !== "minigame") return;
+                const pos = missionState.extra.pos;
+                if (pos >= 195 && pos <= 245) { missionState.hits++; sfxMissionTick(); document.getElementById("missionProgress").innerText = `${missionState.hits} / ${missionState.target}`; if (missionState.hits >= missionState.target) endMission(true); }
+                else { playTone(200, 0.08, "sawtooth", 0.08); }
+            });
+        }
+
+        // NUEVO MINIJUEGO: reemplazar fábrica por aerogenerador (click en fábrica, luego en el aerogenerador)
+        function initSwapMission(arena, m) {
+            missionState.target = 5;
+            missionState.extra.step = "factory";
+            arena.innerHTML = `<div id="swapTarget" style="position:absolute;width:60px;height:60px;font-size:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;"></div>`;
+            const t = document.getElementById("swapTarget");
+            function placeFactory() {
+                missionState.extra.step = "factory";
+                t.innerText = "🏭";
+                const maxX = Math.max(10, arena.clientWidth - 60), maxY = Math.max(10, arena.clientHeight - 60);
+                t.style.left = Math.random() * maxX + "px"; t.style.top = Math.random() * maxY + "px";
+            }
+            function placeTurbine() {
+                missionState.extra.step = "turbine";
+                t.innerText = "🌀";
+                const maxX = Math.max(10, arena.clientWidth - 60), maxY = Math.max(10, arena.clientHeight - 60);
+                t.style.left = Math.random() * maxX + "px"; t.style.top = Math.random() * maxY + "px";
+            }
+            placeFactory();
+            t.addEventListener("click", () => {
+                if (gameState !== "minigame") return;
+                sfxMissionTick();
+                if (missionState.extra.step === "factory") { placeTurbine(); }
+                else {
+                    missionState.hits++;
+                    document.getElementById("missionProgress").innerText = `${missionState.hits} / ${missionState.target}`;
+                    if (missionState.hits >= missionState.target) { endMission(true); return; }
+                    placeFactory();
+                }
+            });
+        }
+
+        function missionTick() {
+            missionState.timeLeft--; document.getElementById("missionTimer").innerText = Math.max(0, missionState.timeLeft) + "s";
+            if (missionState.timeLeft <= 0) endMission(false);
+        }
+        function endMission(success) {
+            clearInterval(missionState.timer); missionState.timer = null;
+            clearMissionExtras();
+            document.getElementById("missionScreen").classList.add("hidden");
+            if (success) {
+                activeMission.completed = true;
+                player.hp = Math.min(player.maxHp, player.hp + 20);
+                nuts += 15;
+                document.getElementById("hp").innerText = player.hp;
+                document.getElementById("nuts").innerText = nuts;
+                document.getElementById("status").innerText = "¡MISIÓN COMPLETADA! +15 🔩";
+                document.getElementById("status").style.color = "#4caf50";
+                document.getElementById("missionCount").innerText = missions.filter(m => m.completed).length;
+                sfxMissionWin();
+                saveProgress();
+            } else {
+                activeMission.cooldown = 120;
+                document.getElementById("status").innerText = "MISIÓN FALLIDA - vuelve a intentarlo";
+                document.getElementById("status").style.color = "#ff9900";
+            }
+            activeMission = null; gameState = "playing";
+        }
+ 
+        const arenaCovers = [{ x: 320, y: 216, width: 128, height: 58 }, { x: 832, y: 216, width: 128, height: 58 }, { x: 560, y: 403, width: 160, height: 58 }, { x: 288, y: 547, width: 96, height: 86 }, { x: 896, y: 547, width: 96, height: 86 }];
+ 
+        let bossODS6 = { x: 620, y: 145, width: 48, height: 48, hp: 35, maxHp: 35, speed: 4.2, active: false }; 
+        let bossODS7 = { x: 600, y: 115, width: 50, height: 50, hp: 45, maxHp: 45, speed: 4.5, direction: 1, shootTimer: 0, active: false }; 
+        let bossODS13 = { x: 600, y: 115, width: 50, height: 50, hp: 55, maxHp: 55, attackTimer: 0, active: false }; 
+        let bossODS14 = { x: 600, y: 115, width: 50, height: 50, hp: 65, maxHp: 65, speed: 3.5, slashTimer: 0, active: false }; 
+        let bossODS15 = { x: 600, y: 115, width: 50, height: 50, hp: 80, maxHp: 80, speed: 3.2, shockTimer: 0, active: false }; 
+ 
+        let shootCooldown = 0;
+        function handleShooting() {
+            let baseCooldown = Math.max(6, 20 - upgrades.attack * 2);
+            if (mouse.down && shootCooldown <= 0 && player.hp > 0 && currentStage > 0) {
+                const centerX = player.x + player.width / 2; const centerY = player.y + player.height / 2;
+                const angle = Math.atan2(mouse.y - centerY, mouse.x - centerX);
+                
+                function spawnBullet(ang) {
+                    bullets.push({ x: centerX, y: centerY, dx: Math.cos(ang) * 8.5, dy: Math.sin(ang) * 8.5, radius: 4, homing: upgrades.homing });
+                }
+
+                spawnBullet(angle);
+                if (upgrades.double) {
+                    spawnBullet(angle - 0.2);
+                    spawnBullet(angle + 0.2);
+                }
+
+                sfxShoot(); shootCooldown = baseCooldown;
+            }
+            if (shootCooldown > 0) shootCooldown--;
+        }
+ 
+        function checkRectCollision(rx, ry, rw, rh, wx, wy, ww, wh) { return rx < wx + ww && rx + rw > wx && ry < wy + wh && ry + rh > wy; }
+
+        function moveWithWalls(entity, dx, dy, walls) {
+            let nx = entity.x + dx, ny = entity.y + dy;
+            let collX = false, collY = false;
+            for (let w of walls) {
+                if (checkRectCollision(nx, entity.y, entity.width, entity.height, w.x, w.y, w.width, w.height)) collX = true;
+                if (checkRectCollision(entity.x, ny, entity.width, entity.height, w.x, w.y, w.width, w.height)) collY = true;
+            }
+            if (!collX) entity.x = nx;
+            if (!collY) entity.y = ny;
+        }
+
+        function lineBlockedByWalls(x1, y1, x2, y2, walls) {
+            const steps = 24;
+            for (let i = 0; i <= steps; i++) {
+                let t = i / steps; let px = x1 + (x2 - x1) * t; let py = y1 + (y2 - y1) * t;
+                for (let w of walls) { if (px > w.x && px < w.x + w.width && py > w.y && py < w.y + w.height) return true; }
+            }
+            return false;
+        }
+ 
+        function damagePlayer(amount) {
+            player.hp -= amount; document.getElementById("hp").innerText = Math.max(0, player.hp);
+            if (hurtCooldown <= 0) { sfxHurt(); hurtCooldown = 10; }
+            checkGameOver();
+        }
+
+        function checkGameOver() {
+            if (player.hp <= 0 && gameState === "playing") {
+                document.getElementById("hp").innerText = 0; document.getElementById("status").innerText = "SISTEMAS DAÑADOS"; document.getElementById("status").style.color = "#ff3366";
+                if (!gameOverSoundPlayed) { sfxDefeat(); gameOverSoundPlayed = true; }
+                gameState = "dead"; document.getElementById("deathScreen").classList.remove("hidden");
+            }
+        }
+
+        function resetPlayer() {
+            player.maxHp = getMaxPlayerHp();
+            player.hp = player.maxHp; 
+            player.x = 2450; player.y = 2450; currentStage = 0;
+            bossODS6.active = false; bossODS7.active = false; bossODS13.active = false; bossODS14.active = false; bossODS15.active = false;
+            laserHazards = []; slashHazards = []; shockwaves = []; bullets = []; enemyBullets = [];
+            document.getElementById("hp").innerText = player.hp; document.getElementById("status").innerText = "RESTAURA EL MUNDO EN RUINAS"; document.getElementById("status").style.color = "#fff"; gameOverSoundPlayed = false;
+        }
+
+        function update() {
+            if (gameState !== "playing") return;
+            if (hurtCooldown > 0) hurtCooldown--;
+ 
+            let nextX = player.x, nextY = player.y;
+            let moveX = 0, moveY = 0;
+            let currentSpeed = getPlayerSpeed();
+            if (keys["w"]) { nextY -= currentSpeed; moveY -= 1; }
+            if (keys["s"]) { nextY += currentSpeed; moveY += 1; }
+            if (keys["a"]) { nextX -= currentSpeed; moveX -= 1; }
+            if (keys["d"]) { nextX += currentSpeed; moveX += 1; }
+
+            if (moveX !== 0 || moveY !== 0) {
+                player.angle = Math.atan2(moveY, moveX);
+            }
+ 
+            if (currentStage === 0) {
+                let collisionX = false, collisionY = false;
+                for (let wall of lobbyWalls) {
+                    if (Math.abs(wall.x - player.x) > 500 || Math.abs(wall.y - player.y) > 500) continue; 
+                    if (checkRectCollision(nextX, player.y, player.width, player.height, wall.x, wall.y, wall.width, wall.height)) collisionX = true;
+                    if (checkRectCollision(player.x, nextY, player.width, player.height, wall.x, wall.y, wall.width, wall.height)) collisionY = true;
+                }
+                if (!collisionX) player.x = nextX; if (!collisionY) player.y = nextY;
+
+                checkMissionTrigger();
+ 
+                let cellWidth = worldWidth / mapGridCols, cellHeight = worldHeight / mapGridRows; let pCol = Math.floor((player.x + player.width / 2) / cellWidth); let pRow = Math.floor((player.y + player.height / 2) / cellHeight);
+                for (let r = pRow - 3; r <= pRow + 3; r++) { for (let c = pCol - 3; c <= pCol + 3; c++) { if (r >= 0 && r < mapGridRows && c >= 0 && c < mapGridCols) exploredCells[r][c] = true; } }
+
+                if (checkRectCollision(player.x, player.y, player.width, player.height, doorODS6.x, doorODS6.y, doorODS6.width, doorODS6.height)) { currentStage = 1; bossODS6.active = true; bossODS6.hp = bossODS6.maxHp; player.x = 620; player.y = 600; document.getElementById("status").innerText = "TUBERÍAS TÓXICAS (ODS 6)"; document.getElementById("status").style.color = "#00e5ff"; }
+                if (checkRectCollision(player.x, player.y, player.width, player.height, doorODS7.x, doorODS7.y, doorODS7.width, doorODS7.height)) { currentStage = 2; bossODS7.active = true; bossODS7.hp = bossODS7.maxHp; player.x = 620; player.y = 600; document.getElementById("status").innerText = "ZONA SMOG (ODS 7)"; document.getElementById("status").style.color = "#ffcc00"; }
+                if (checkRectCollision(player.x, player.y, player.width, player.height, doorODS13.x, doorODS13.y, doorODS13.width, doorODS13.height)) { currentStage = 3; bossODS13.active = true; bossODS13.hp = bossODS13.maxHp; player.x = 620; player.y = 600; document.getElementById("status").innerText = "BOSQUE CALCINADO (ODS 13)"; document.getElementById("status").style.color = "#ff4d4d"; }
+                if (checkRectCollision(player.x, player.y, player.width, player.height, doorODS14.x, doorODS14.y, doorODS14.width, doorODS14.height)) { currentStage = 4; bossODS14.active = true; bossODS14.hp = bossODS14.maxHp; player.x = 620; player.y = 650; document.getElementById("status").innerText = "FOSA DE BASURA (ODS 14)"; document.getElementById("status").style.color = "#7b68ee"; }
+                if (checkRectCollision(player.x, player.y, player.width, player.height, doorODS15.x, doorODS15.y, doorODS15.width, doorODS15.height)) { currentStage = 5; bossODS15.active = true; bossODS15.hp = bossODS15.maxHp; player.x = 620; player.y = 650; document.getElementById("status").innerText = "TIERRA MUERTA (ODS 15)"; document.getElementById("status").style.color = "#8bc34a"; }
+                return;
+            } else {
+                let collisionX = false, collisionY = false;
+                if (currentStage === 4 || currentStage === 5) {
+                    for (let cover of arenaCovers) { if (checkRectCollision(nextX, player.y, player.width, player.height, cover.x, cover.y, cover.width, cover.height)) collisionX = true; if (checkRectCollision(player.x, nextY, player.width, player.height, cover.x, cover.y, cover.width, cover.height)) collisionY = true; }
+                }
+                if (!collisionX && nextX > 0 && nextX < canvas.width - player.width) player.x = nextX; if (!collisionY && nextY > 0 && nextY < canvas.height - player.height) player.y = nextY;
+            }
+ 
+            handleShooting();
+ 
+            let activeBoss = null;
+            if (currentStage === 1 && bossODS6.active) activeBoss = bossODS6; 
+            if (currentStage === 2 && bossODS7.active) activeBoss = bossODS7; 
+            if (currentStage === 3 && bossODS13.active) activeBoss = bossODS13; 
+            if (currentStage === 4 && bossODS14.active) activeBoss = bossODS14; 
+            if (currentStage === 5 && bossODS15.active) activeBoss = bossODS15;
+
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                let b = bullets[i];
+                if (b.homing && activeBoss) {
+                    let bAngle = Math.atan2((activeBoss.y + activeBoss.height/2) - b.y, (activeBoss.x + activeBoss.width/2) - b.x);
+                    b.dx += Math.cos(bAngle) * 0.4;
+                    b.dy += Math.sin(bAngle) * 0.4;
+                    let speed = Math.hypot(b.dx, b.dy);
+                    if (speed > 8.5) { b.dx = (b.dx / speed) * 8.5; b.dy = (b.dy / speed) * 8.5; }
+                }
+
+                b.x += b.dx; b.y += b.dy;
+                if (currentStage === 4 || currentStage === 5) {
+                    let hitCover = false; for (let cover of arenaCovers) { if (b.x > cover.x && b.x < cover.x + cover.width && b.y > cover.y && b.y < cover.y + cover.height) { hitCover = true; break; } }
+                    if (hitCover) { bullets.splice(i, 1); continue; }
+                }
+ 
+                if (activeBoss && b.x > activeBoss.x && b.x < activeBoss.x + activeBoss.width && b.y > activeBoss.y && b.y < activeBoss.y + activeBoss.height) {
+                    activeBoss.hp--; bullets.splice(i, 1); sfxHit();
+                    if (activeBoss.hp <= 0) {
+                        activeBoss.active = false; laserHazards = []; slashHazards = []; shockwaves = []; enemyBullets = []; sfxBossDown();
+                        nuts += 100;
+                        document.getElementById("nuts").innerText = nuts;
+                        const odsNumber = stageToODS[currentStage]; if (odsNumber) { completedODS.add(odsNumber); saveProgress(); }
+                        currentStage = 0; player.x = 2450; player.y = 2450;
+                        if (completedODS.size >= 5) triggerVictory(); else { document.getElementById("status").innerText = "¡ZONA PURIFICADA! +100 🔩"; document.getElementById("status").style.color = "#4caf50"; }
+                    }
+                    continue;
+                }
+                if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) bullets.splice(i, 1);
+            }
+ 
+            // IA Jefes
+            if (currentStage === 1 && bossODS6.active) { const angle = Math.atan2((player.y + player.height/2) - (bossODS6.y + bossODS6.height/2), (player.x + player.width/2) - (bossODS6.x + bossODS6.width/2)); bossODS6.x += Math.cos(angle) * bossODS6.speed; bossODS6.y += Math.sin(angle) * bossODS6.speed; if (Math.random() < 0.015) enemyBullets.push({ x: bossODS6.x + 24, y: bossODS6.y + 24, dx: Math.cos(angle) * 3, dy: Math.sin(angle) * 3, radius: 4, color: "#8bc34a" }); if (checkRectCollision(player.x, player.y, player.width, player.height, bossODS6.x, bossODS6.y, bossODS6.width, bossODS6.height)) damagePlayer(1); }
+            if (currentStage === 2 && bossODS7.active) { bossODS7.x += bossODS7.speed * bossODS7.direction; if (bossODS7.x <= 50 || bossODS7.x >= canvas.width - 100) bossODS7.direction *= -1; bossODS7.shootTimer++; if (bossODS7.shootTimer >= 25) { bossODS7.shootTimer = 0; const angle = Math.atan2((player.y + player.height/2) - (bossODS7.y + bossODS7.height/2), (player.x + player.width/2) - (bossODS7.x + bossODS7.width/2)); [-0.2, 0, 0.2].forEach(offset => { enemyBullets.push({ x: bossODS7.x + 25, y: bossODS7.y + 25, dx: Math.cos(angle + offset) * 4.5, dy: Math.sin(angle + offset) * 4.5, radius: 4, color: "#444" }); }); } }
+            for (let i = enemyBullets.length - 1; i >= 0; i--) { enemyBullets[i].x += enemyBullets[i].dx; enemyBullets[i].y += enemyBullets[i].dy; if (Math.hypot(enemyBullets[i].x - (player.x + player.width/2), enemyBullets[i].y - (player.y + player.height/2)) < enemyBullets[i].radius + player.width/2) { damagePlayer(10); enemyBullets.splice(i, 1); continue; } if (enemyBullets[i].x < 0 || enemyBullets[i].x > canvas.width || enemyBullets[i].y < 0 || enemyBullets[i].y > canvas.height) enemyBullets.splice(i, 1); }
+            
+            if (currentStage === 3 && bossODS13.active) { 
+                bossODS13.attackTimer++; 
+                if (bossODS13.attackTimer >= 20) { 
+                    bossODS13.attackTimer = 0; 
+                    let isHorizontal = Math.random() < 0.5; 
+                    let pos = isHorizontal ? (player.y + player.height / 2) : (player.x + player.width / 2); 
+                    pos = Math.max(60, Math.min((isHorizontal ? canvas.height : canvas.width) - 60, pos)); 
+                    laserHazards.push({ horizontal: isHorizontal, position: pos, timer: 60, active: false, duration: 35 }); 
+                } 
+                for (let i = laserHazards.length - 1; i >= 0; i--) { 
+                    let h = laserHazards[i]; 
+                    if (!h.active) { 
+                        h.timer--; if (h.timer <= 0) h.active = true; 
+                    } else { 
+                        h.duration--; let pCenterX = player.x + player.width / 2; let pCenterY = player.y + player.height / 2; 
+                        if (h.horizontal && Math.abs(pCenterY - h.position) < 14) damagePlayer(12); 
+                        else if (!h.horizontal && Math.abs(pCenterX - h.position) < 14) damagePlayer(12); 
+                        if (h.duration <= 0) laserHazards.splice(i, 1); 
+                    } 
+                } 
+            }
+            if (currentStage === 4 && bossODS14.active) { const angle = Math.atan2((player.y + player.height/2) - (bossODS14.y + bossODS14.height/2), (player.x + player.width/2) - (bossODS14.x + bossODS14.width/2)); bossODS14.x += Math.cos(angle) * bossODS14.speed; bossODS14.y += Math.sin(angle) * bossODS14.speed; bossODS14.slashTimer++; if (bossODS14.slashTimer >= 30) { bossODS14.slashTimer = 0; slashHazards.push({ x: bossODS14.x + bossODS14.width/2, y: bossODS14.y + bossODS14.height/2, dx: Math.cos(angle) * 8.5, dy: Math.sin(angle) * 8.5, width: 45, height: 16, angle: angle, duration: 60 }); } for (let i = slashHazards.length - 1; i >= 0; i--) { let s = slashHazards[i]; s.x += s.dx; s.y += s.dy; s.duration--; let pCenterX = player.x + player.width / 2, pCenterY = player.y + player.height / 2; let blockedByCover = false; for (let cover of arenaCovers) { if (s.x > cover.x && s.x < cover.x + cover.width && s.y > cover.y && s.y < cover.y + cover.height) { blockedByCover = true; break; } } if (!blockedByCover && Math.hypot(s.x - pCenterX, s.y - pCenterY) < 22) { damagePlayer(12); slashHazards.splice(i, 1); continue; } if (s.duration <= 0 || blockedByCover) slashHazards.splice(i, 1); } }
+            
+            if (currentStage === 5 && bossODS15.active) {
+                let bCenterX = bossODS15.x + bossODS15.width/2, bCenterY = bossODS15.y + bossODS15.height/2;
+                let pCenterX = player.x + player.width/2, pCenterY = player.y + player.height/2;
+                const angle = Math.atan2(pCenterY - bCenterY, pCenterX - bCenterX);
+                moveWithWalls(bossODS15, Math.cos(angle) * bossODS15.speed, Math.sin(angle) * bossODS15.speed, arenaCovers);
+                if (checkRectCollision(player.x, player.y, player.width, player.height, bossODS15.x, bossODS15.y, bossODS15.width, bossODS15.height)) damagePlayer(1);
+                
+                bossODS15.shockTimer++;
+                if (bossODS15.shockTimer >= 50) {
+                    bossODS15.shockTimer = 0; 
+                    shockwaves.push({ x: bossODS15.x + bossODS15.width / 2, y: bossODS15.y + bossODS15.height / 2, radius: 10, maxRadius: 450, speed: 6.5 }); 
+                }
+                for (let i = shockwaves.length - 1; i >= 0; i--) {
+                    let sw = shockwaves[i]; sw.radius += sw.speed;
+                    if (Math.abs(Math.hypot(sw.x - pCenterX, sw.y - pCenterY) - sw.radius) < 14) {
+                        let blocked = lineBlockedByWalls(sw.x, sw.y, pCenterX, pCenterY, arenaCovers);
+                        if (!blocked) { damagePlayer(15); shockwaves.splice(i, 1); continue; }
+                    }
+                    if (sw.radius >= sw.maxRadius) shockwaves.splice(i, 1);
+                }
+            }
+        }
+ 
+        document.getElementById("respawnBtn").addEventListener("click", () => { document.getElementById("deathScreen").classList.add("hidden"); resetPlayer(); gameState = "playing"; });
+        function renderProgressList() { const el = document.getElementById("progressList"); if (completedODS.size === 0) { el.innerHTML = ""; return; } let html = "<strong style='color:#4caf50;'>ZONAS PURIFICADAS:</strong><br>"; [...completedODS].sort((a, b) => a - b).forEach(n => { html += `<div>✔ ODS ${n}: ${odsData[n].name}</div>`; }); el.innerHTML = html; }
+        function triggerVictory() { gameState = "victory"; let html = ""; Object.keys(odsData).forEach(n => { html += `<div><strong style="color:#4caf50;">ODS ${n} — ${odsData[n].name}:</strong> <span style="color:#ccc">${odsData[n].desc}</span></div>`; }); document.getElementById("odsSummary").innerHTML = html; document.getElementById("victoryScreen").classList.remove("hidden"); sfxVictory(); }
+        document.getElementById("startBtn").addEventListener("click", () => { getAudioCtx(); gameState = "playing"; document.getElementById("startScreen").classList.add("hidden"); });
+
+        // ==========================================
+        // INTRODUCCIÓN NARRATIVA CON EFECTO DE ESCRITURA
+        // ==========================================
+        const introFullText = "El mundo colapsó bajo su propia contaminación, deforestación y violencia. Hoy, la Tierra es un desierto tóxico dominado por nuestros errores. Pero la esperanza no respira; se programa. Eres el Último Protocolo. Tu misión: derrotar a los Jefes y cumplir con las ODS para restaurar el planeta. Sistema en línea... Iniciando corrección.";
+        let introFinished = false;
+        function finishIntro() {
+            if (introFinished) return;
+            introFinished = true;
+            clearInterval(introTypeInterval);
+            document.getElementById("introScreen").classList.add("hidden");
+            document.getElementById("startScreen").classList.remove("hidden");
+            gameState = "start";
+        }
+        let introTypeInterval = null;
+        function startIntro() {
+            const target = document.getElementById("introTextInner");
+            const totalDurationMs = 7000;
+            const stepMs = Math.max(18, Math.floor(totalDurationMs / introFullText.length));
+            let i = 0;
+            introTypeInterval = setInterval(() => {
+                if (i < introFullText.length) {
+                    target.innerText += introFullText[i];
+                    i++;
+                    if (i % 4 === 0) playTone(200 + Math.random() * 60, 0.02, "square", 0.02);
+                } else {
+                    clearInterval(introTypeInterval);
+                    setTimeout(finishIntro, 900);
+                }
+            }, stepMs);
+        }
+        document.getElementById("introScreen").addEventListener("click", finishIntro);
+        startIntro();
+        document.getElementById("restartBtn").addEventListener("click", () => { document.getElementById("victoryScreen").classList.add("hidden"); completedODS.clear(); nuts = 0; upgrades = { move: 0, attack: 0, hp: 0, double: false, homing: false }; document.getElementById("nuts").innerText = nuts; saveProgress(); resetPlayer(); gameState = "playing"; });
+        renderProgressList();
+
+        function drawMissions(camLeft, camRight, camTop, camBottom) {
+            missions.forEach(m => {
+                if (m.x + 30 < camLeft || m.x - 30 > camRight || m.y + 30 < camTop || m.y - 30 > camBottom) return;
+                ctx.save();
+                ctx.globalAlpha = m.completed ? 0.35 : 1;
+                ctx.shadowBlur = m.completed ? 0 : 14; ctx.shadowColor = m.color;
+                ctx.fillStyle = "rgba(10,10,10,0.55)"; ctx.beginPath(); ctx.arc(m.x, m.y, 22, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = m.color; ctx.lineWidth = 3; ctx.stroke();
+                ctx.font = "22px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                ctx.fillText(m.completed ? "✔" : m.icon, m.x, m.y);
+                ctx.restore();
+            });
+            ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+        }
+ 
+        // ==========================================
+        // DIBUJO DEL ROBOT IDENTICO A LA IMAGEN DE REFERENCIA
+        // ==========================================
+        function drawRobotPixelArt() {
+            let w = 40, h = 44;
+
+            // 1. Orugas (Izquierda y Derecha)
+            ctx.fillStyle = "#1e222b";
+            ctx.strokeStyle = "#0d1117";
+            ctx.lineWidth = 1;
+            
+            ctx.fillRect(-w/2 - 6, -h/2 + 2, 8, h - 4);
+            ctx.strokeRect(-w/2 - 6, -h/2 + 2, 8, h - 4);
+            ctx.fillStyle = "#2c3440";
+            for(let ty = -h/2 + 4; ty < h/2 - 4; ty += 4) {
+                ctx.fillRect(-w/2 - 5, ty, 6, 2);
+            }
+
+            ctx.fillStyle = "#1e222b";
+            ctx.fillRect(w/2 - 2, -h/2 + 2, 8, h - 4);
+            ctx.strokeRect(w/2 - 2, -h/2 + 2, 8, h - 4);
+            ctx.fillStyle = "#2c3440";
+            for(let ty = -h/2 + 4; ty < h/2 - 4; ty += 4) {
+                ctx.fillRect(w/2 - 1, ty, 6, 2);
+            }
+
+            // 2. Propulsores inferiores (llamas de ión)
+            ctx.fillStyle = "#38bdf8";
+            ctx.fillRect(-8, h/2 - 2, 4, 6);
+            ctx.fillRect(4, h/2 - 2, 4, 6);
+
+            // 3. Chasis principal metálico
+            ctx.fillStyle = "#334155";
+            ctx.fillRect(-w/2, -h/2 + 8, w, h - 12);
+            ctx.strokeStyle = "#1e293b";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-w/2, -h/2 + 8, w, h - 12);
+
+            // Línea divisoria de paneles
+            ctx.strokeStyle = "#1e293b";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, -h/2 + 8); ctx.lineTo(0, h/2 - 4);
+            ctx.stroke();
+
+            // 4. Placa central con el rayo de energía
+            ctx.fillStyle = "#1e293b";
+            ctx.fillRect(-8, -2, 16, 16);
+            ctx.strokeStyle = "#475569";
+            ctx.strokeRect(-8, -2, 16, 16);
+
+            ctx.fillStyle = "#facc15";
+            ctx.beginPath();
+            ctx.moveTo(1, 2);
+            ctx.lineTo(-3, 7);
+            ctx.lineTo(1, 7);
+            ctx.lineTo(-1, 12);
+            ctx.lineTo(4, 5);
+            ctx.lineTo(0, 5);
+            ctx.closePath();
+            ctx.fill();
+
+            // 5. Cabeza / Torreta superior
+            ctx.fillStyle = "#cbd5e1";
+            ctx.fillRect(-12, -h/2 - 2, 24, 16);
+            ctx.strokeStyle = "#64748b";
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(-12, -h/2 - 2, 24, 16);
+
+            // Ojos brillantes anaranjados
+            ctx.fillStyle = "#f59e0b";
+            ctx.shadowBlur = 6;
+            ctx.shadowColor = "#f59e0b";
+            ctx.fillRect(-8, -h/2 + 2, 5, 6);
+            ctx.fillRect(3, -h/2 + 2, 5, 6);
+            ctx.shadowBlur = 0;
+
+            // 6. Antena superior con punta roja
+            ctx.strokeStyle = "#64748b";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, -h/2 - 2);
+            ctx.lineTo(0, -h/2 - 10);
+            ctx.stroke();
+
+            ctx.fillStyle = "#ef4444";
+            ctx.beginPath();
+            ctx.arc(0, -h/2 - 11, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+ 
+        function hexToRgba(hex, alpha) {
+            let r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
+            return `rgba(${r},${g},${b},${alpha})`;
+        }
+        // Degrada la transición entre dos zonas dibujando un gradiente suave sobre la franja limítrofe
+        function drawZoneBlend(x, y, w, h, colorA, colorB, horizontal) {
+            let grad;
+            if (horizontal) grad = ctx.createLinearGradient(x, 0, x + w, 0);
+            else grad = ctx.createLinearGradient(0, y, 0, y + h);
+            grad.addColorStop(0, hexToRgba(colorA, 0));
+            grad.addColorStop(0.5, hexToRgba(colorA, 0.4));
+            grad.addColorStop(0.5, hexToRgba(colorB, 0.4));
+            grad.addColorStop(1, hexToRgba(colorB, 0));
+            ctx.fillStyle = grad;
+            ctx.fillRect(x, y, w, h);
+        }
+        function drawZoneBlends() {
+            const band = 180;
+            // ODS6 (agua, izq-sup) <-> ODS7 (energía, der-sup)
+            drawZoneBlend(2500 - band/2, 0, band, 2000, "#00e5ff", "#ffcc00", true);
+            // ODS6 <-> ODS13 (bosque, izq-inf)
+            drawZoneBlend(0, 2500 - band/2, 2000, band, "#00e5ff", "#ff4d4d", false);
+            // ODS7 <-> ODS14 (marino, der-inf)
+            drawZoneBlend(3000, 2500 - band/2, 2000, band, "#ffcc00", "#7b68ee", false);
+            // ODS13 <-> ODS14 (franja diagonal central, aprox horizontal)
+            drawZoneBlend(2500 - band/2, 2000, band, 3000, "#ff4d4d", "#7b68ee", true);
+            // ODS15 (tierra, centro-sup) <-> ODS6
+            drawZoneBlend(1700 - band/2, 0, band, 2000, "#8bc34a", "#00e5ff", true);
+            // ODS15 <-> ODS7
+            drawZoneBlend(3300 - band/2, 0, band, 2000, "#8bc34a", "#ffcc00", true);
+        }
+
+        // ==========================================
+        // JEFES TEMATIZADOS SEGÚN SU CONTEXTO
+        // ==========================================
+        function drawBossODS6(b) {
+            // Contexto: agua sucia / contaminación hídrica
+            let cx = b.x + b.width/2, cy = b.y + b.height/2;
+            ctx.save();
+            ctx.shadowBlur = 18; ctx.shadowColor = "#4a5d23";
+            let grad = ctx.createRadialGradient(cx, cy, 4, cx, cy, 26);
+            grad.addColorStop(0, "#6b7a3a"); grad.addColorStop(1, "#33401a");
+            ctx.fillStyle = grad;
+            ctx.beginPath(); ctx.arc(cx, cy, 24, 0, Math.PI*2); ctx.fill();
+            // Gotas/burbujas tóxicas goteando
+            ctx.fillStyle = "rgba(150,170,60,0.7)";
+            for (let i=0;i<4;i++) { let ang = (Date.now()/500 + i*1.6); ctx.beginPath(); ctx.arc(cx + Math.cos(ang)*20, cy + Math.sin(ang)*20, 3, 0, Math.PI*2); ctx.fill(); }
+            ctx.strokeStyle = "#1a2408"; ctx.lineWidth = 3; ctx.stroke();
+            ctx.shadowBlur = 0;
+            ctx.restore();
+            ctx.fillStyle = "#111"; ctx.fillRect(b.x - 2, b.y - 12, b.width+4, 6); ctx.fillStyle = "#a3c93a"; ctx.fillRect(b.x - 2, b.y - 12, (b.hp / b.maxHp) * (b.width+4), 6);
+        }
+        function drawBossODS7(b) {
+            // Contexto: energía y electricidad
+            let bx = b.x, by = b.y;
+            ctx.save();
+            ctx.shadowBlur = 22; ctx.shadowColor = "#ffe066";
+            ctx.fillStyle = "#1a1a22"; ctx.fillRect(bx, by, 50, 50);
+            ctx.strokeStyle = "#ffcc00"; ctx.lineWidth = 2; ctx.strokeRect(bx, by, 50, 50);
+            // Rayo eléctrico central
+            ctx.strokeStyle = "#fff176"; ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(bx+30, by+6); ctx.lineTo(bx+18, by+24); ctx.lineTo(bx+28, by+24); ctx.lineTo(bx+14, by+46);
+            ctx.stroke();
+            // Chispas parpadeantes
+            if (Math.random() < 0.5) { ctx.fillStyle = "#ffee58"; ctx.beginPath(); ctx.arc(bx + Math.random()*50, by + Math.random()*50, 2, 0, Math.PI*2); ctx.fill(); }
+            ctx.shadowBlur = 0;
+            ctx.restore();
+            ctx.fillStyle = "#111"; ctx.fillRect(bx - 2, by - 12, 54, 6); ctx.fillStyle = "#ffe066"; ctx.fillRect(bx - 2, by - 12, (b.hp / b.maxHp) * 54, 6);
+        }
+        function drawBossODS13(b) {
+            // Contexto: fuego / incendio
+            let bx = 600, by = 115;
+            ctx.save();
+            ctx.shadowBlur = 24; ctx.shadowColor = "#ff5500";
+            let flick = 4 * Math.sin(Date.now()/90);
+            let grad = ctx.createRadialGradient(bx+25, by+30, 4, bx+25, by+30, 30);
+            grad.addColorStop(0, "#ffe082"); grad.addColorStop(0.5, "#ff6f00"); grad.addColorStop(1, "#b71c1c");
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.moveTo(bx+25, by - flick); ctx.lineTo(bx+50+flick*0.5, by+50); ctx.lineTo(bx - flick*0.5, by+50);
+            ctx.closePath(); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.restore();
+            ctx.fillStyle = "#111"; ctx.fillRect(bx - 2, by - 12, 54, 6); ctx.fillStyle = "#ff4d4d"; ctx.fillRect(bx - 2, by - 12, (b.hp / b.maxHp) * 54, 6);
+        }
+        function drawBossODS14(b) {
+            // Contexto: daño a la vida submarina (mancha de petróleo/tentáculos)
+            let bx = b.x, by = b.y, cx = bx+25, cy = by+25;
+            ctx.save();
+            ctx.shadowBlur = 16; ctx.shadowColor = "#3a2a55";
+            ctx.fillStyle = "#241832";
+            ctx.beginPath(); ctx.arc(cx, cy, 24, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = "#5b3a7a"; ctx.lineWidth = 2; ctx.stroke();
+            // Tentáculos oscuros de petróleo
+            ctx.strokeStyle = "#120a1c"; ctx.lineWidth = 5; ctx.lineCap = "round";
+            for (let i=0;i<5;i++) { let ang = (i/5)*Math.PI*2 + Date.now()/700; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx + Math.cos(ang)*30, cy + Math.sin(ang)*30); ctx.stroke(); }
+            // Brillo aceitoso
+            ctx.fillStyle = "rgba(120,80,180,0.35)"; ctx.beginPath(); ctx.arc(cx-6, cy-6, 8, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.restore();
+            ctx.fillStyle = "#111"; ctx.fillRect(bx - 2, by - 12, 54, 6); ctx.fillStyle = "#7b68ee"; ctx.fillRect(bx - 2, by - 12, (b.hp / b.maxHp) * 54, 6);
+        }
+        function drawBossODS15(b) {
+            // Contexto: daño a los árboles / deforestación (tocón corrupto con espinas)
+            let bx = b.x, by = b.y, cx = bx+25, cy = by+25;
+            ctx.save();
+            ctx.shadowBlur = 14; ctx.shadowColor = "#3e2a1a";
+            ctx.fillStyle = "#4a3320"; ctx.fillRect(bx+8, by+18, 34, 30);
+            ctx.strokeStyle = "#241708"; ctx.lineWidth = 2; ctx.strokeRect(bx+8, by+18, 34, 30);
+            // Anillos de tocón muerto
+            ctx.strokeStyle = "#241708"; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.ellipse(cx, by+18, 17, 6, 0, 0, Math.PI*2); ctx.stroke();
+            ctx.beginPath(); ctx.ellipse(cx, by+18, 10, 3.5, 0, 0, Math.PI*2); ctx.stroke();
+            // Espinas rojas de corrupción
+            ctx.fillStyle = "#8b1a1a";
+            for (let i=0;i<5;i++) { let ang = -Math.PI/2 + (i-2)*0.4; ctx.save(); ctx.translate(cx, by+14); ctx.rotate(ang); ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-3,-14); ctx.lineTo(3,-14); ctx.closePath(); ctx.fill(); ctx.restore(); }
+            ctx.shadowBlur = 0;
+            ctx.restore();
+            ctx.fillStyle = "#111"; ctx.fillRect(bx - 2, by - 12, 54, 6); ctx.fillStyle = "#8bc34a"; ctx.fillRect(bx - 2, by - 12, (b.hp / b.maxHp) * 54, 6);
+        }
+
+        function draw() {
+            let bgColors = ["#111", "#1a2a1a", "#331a1a", "#1a1a1a", "#111122", "#2a2211"];
+            ctx.fillStyle = bgColors[currentStage];
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+ 
+            ctx.save();
+            let cameraX = 0, cameraY = 0;
+            if (currentStage === 0) {
+                cameraX = Math.max(0, Math.min(worldWidth - canvas.width, player.x - canvas.width / 2));
+                cameraY = Math.max(0, Math.min(worldHeight - canvas.height, player.y - canvas.height / 2));
+                ctx.translate(-cameraX, -cameraY);
+
+                if(patterns.waterGround) { ctx.fillStyle = patterns.waterGround; ctx.fillRect(0, 0, 2500, 2500); }
+                if(patterns.energyGround) { ctx.fillStyle = patterns.energyGround; ctx.fillRect(2500, 0, 2500, 2500); }
+                if(patterns.climateGround) { ctx.fillStyle = patterns.climateGround; ctx.fillRect(0, 2500, 2500, 2500); }
+                if(patterns.marineGround) { ctx.fillStyle = patterns.marineGround; ctx.fillRect(2500, 2500, 2500, 2500); }
+                if(patterns.earthGround) { ctx.fillStyle = patterns.earthGround; ctx.fillRect(1700, 0, 1600, 2000); }
+                if(patterns.cityGround) { ctx.fillStyle = patterns.cityGround; ctx.fillRect(2020, 2020, 960, 960); }
+                drawZoneBlends();
+            }
+            
+            if (currentStage === 0) {
+                let camLeft = cameraX, camRight = cameraX + canvas.width, camTop = cameraY, camBottom = cameraY + canvas.height;
+                ctx.font = "24px Arial";
+                
+                lobbyWalls.forEach(w => {
+                    if (w.x + w.width < camLeft || w.x > camRight || w.y + w.height < camTop || w.y > camBottom) return;
+
+                    if (w.zone === "border" || w.zone === "neutral") {
+                        ctx.fillStyle = "#333"; ctx.fillRect(w.x, w.y, w.width, w.height);
+                        ctx.strokeStyle = "#111"; ctx.lineWidth = 2; ctx.strokeRect(w.x, w.y, w.width, w.height);
+                        ctx.fillText("🏚️", w.x + w.width/2 - 12, w.y + w.height/2 + 8);
+                    } 
+                    else if (w.zone === "ODS6") { 
+                        if (imgZona1.complete && imgZona1.naturalWidth !== 0) {
+                            ctx.drawImage(imgZona1, w.x, w.y, w.width, w.height);
+                        } else {
+                            // Respaldo visual por si la imagen tarda en cargar
+                            ctx.fillStyle = "#8b4513"; ctx.fillRect(w.x, w.y, w.width, w.height);
+                            ctx.fillText("🛢️", w.x + w.width/2 - 12, w.y + w.height/2 + 8);
+                        }
+                    }
+                    else if (w.zone === "ODS7") { 
+                        ctx.fillStyle = "#111"; ctx.fillRect(w.x, w.y, w.width, w.height);
+                        ctx.strokeStyle = "#444"; ctx.lineWidth = 4; ctx.strokeRect(w.x, w.y, w.width, w.height);
+                        ctx.fillText("🏭", w.x + w.width/2 - 12, w.y + w.height/2 + 8);
+                    }
+                    else if (w.zone === "ODS13") { 
+                        ctx.fillStyle = "#2b1408"; ctx.fillRect(w.x, w.y, w.width, w.height);
+                        ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(w.x+w.width/2, w.y+w.height/2, w.width/2.5, 0, Math.PI*2); ctx.fill();
+                        if (w.width > 50) ctx.fillText("🔥", w.x + w.width/2 - 12, w.y + w.height/2 + 8);
+                        else ctx.fillText("🪵", w.x + w.width/2 - 12, w.y + w.height/2 + 8);
+                    }
+                    else if (w.zone === "ODS14") { 
+                        ctx.fillStyle = "#dcdcdc"; ctx.fillRect(w.x, w.y, w.width, w.height);
+                        ctx.fillText("🗑️", w.x + w.width/2 - 12, w.y + w.height/2 + 8);
+                    }
+                    else if (w.zone === "ODS15") { 
+                        ctx.fillStyle = "#5c4033"; ctx.fillRect(w.x, w.y, w.width, w.height);
+                        ctx.fillText("🥀", w.x + w.width/2 - 12, w.y + w.height/2 + 8);
+                    }
+                });
+
+                drawMissions(camLeft, camRight, camTop, camBottom);
+
+                // Estación de Tienda
+                ctx.save();
+                ctx.shadowBlur = 15; ctx.shadowColor = "#ffcc00";
+                ctx.fillStyle = "#222"; ctx.fillRect(shopStation.x, shopStation.y, shopStation.width, shopStation.height);
+                ctx.strokeStyle = "#ffcc00"; ctx.lineWidth = 3; ctx.strokeRect(shopStation.x, shopStation.y, shopStation.width, shopStation.height);
+                ctx.font = "22px Arial"; ctx.fillText("🛒", shopStation.x + 12, shopStation.y + 32);
+                ctx.font = "11px 'Courier New'"; ctx.fillStyle = "#ffcc00"; ctx.fillText("TIENDA (E)", shopStation.x - 4, shopStation.y - 6);
+                ctx.restore();
+ 
+                ctx.shadowBlur = 20; ctx.font = "14px 'Courier New'";
+                ctx.shadowColor = "#00e5ff"; ctx.fillStyle = "#00e5ff"; ctx.fillRect(doorODS6.x, doorODS6.y, doorODS6.width, doorODS6.height); ctx.fillStyle = "#000"; ctx.fillText("ODS6", doorODS6.x + 8, doorODS6.y + 30);
+                ctx.shadowColor = "#ffcc00"; ctx.fillStyle = "#ffcc00"; ctx.fillRect(doorODS7.x, doorODS7.y, doorODS7.width, doorODS7.height); ctx.fillStyle = "#000"; ctx.fillText("ODS7", doorODS7.x + 8, doorODS7.y + 30);
+                ctx.shadowColor = "#ff4d4d"; ctx.fillStyle = "#ff4d4d"; ctx.fillRect(doorODS13.x, doorODS13.y, doorODS13.width, doorODS13.height); ctx.fillStyle = "#000"; ctx.fillText("ODS13", doorODS13.x + 4, doorODS13.y + 30);
+                ctx.shadowColor = "#7b68ee"; ctx.fillStyle = "#7b68ee"; ctx.fillRect(doorODS14.x, doorODS14.y, doorODS14.width, doorODS14.height); ctx.fillStyle = "#fff"; ctx.fillText("ODS14", doorODS14.x + 4, doorODS14.y + 30);
+                ctx.shadowColor = "#8bc34a"; ctx.fillStyle = "#8bc34a"; ctx.fillRect(doorODS15.x, doorODS15.y, doorODS15.width, doorODS15.height); ctx.fillStyle = "#000"; ctx.fillText("ODS15", doorODS15.x + 4, doorODS15.y + 30);
+                ctx.shadowBlur = 0;
+            }
+ 
+            if (currentStage === 4 || currentStage === 5) {
+                ctx.fillStyle = currentStage === 4 ? "#445" : "#543"; 
+                ctx.strokeStyle = "#111"; ctx.lineWidth = 2;
+                arenaCovers.forEach(c => { ctx.fillRect(c.x, c.y, c.width, c.height); ctx.strokeRect(c.x, c.y, c.width, c.height); });
+            }
+ 
+            if (currentStage === 3) {
+                laserHazards.forEach(h => { ctx.strokeStyle = h.active ? "#ffaa00" : "rgba(255, 170, 0, 0.4)"; ctx.lineWidth = h.active ? 20 : 2; if (h.active) { ctx.shadowBlur = 15; ctx.shadowColor = "#ffaa00"; } ctx.beginPath(); if (h.horizontal) { ctx.moveTo(0, h.position); ctx.lineTo(canvas.width, h.position); } else { ctx.moveTo(h.position, 0); ctx.lineTo(h.position, canvas.height); } ctx.stroke(); ctx.shadowBlur = 0; });
+            }
+            if (currentStage === 4) {
+                slashHazards.forEach(s => { ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.angle); ctx.fillStyle = "#444"; ctx.shadowBlur = 10; ctx.shadowColor = "#111"; ctx.fillRect(-s.width/2, -s.height/2, s.width, s.height); ctx.restore(); });
+            }
+            if (currentStage === 5) {
+                shockwaves.forEach(sw => { ctx.strokeStyle = "rgba(139, 100, 50, 0.8)"; ctx.lineWidth = 8; ctx.shadowBlur = 10; ctx.shadowColor = "#5c4033"; ctx.beginPath(); ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2); ctx.stroke(); ctx.shadowBlur = 0; });
+            }
+ 
+            ctx.fillStyle = "#e0ffe0"; bullets.forEach(b => { ctx.shadowBlur=10; ctx.shadowColor="#4caf50"; ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2); ctx.fill(); }); ctx.shadowBlur=0;
+            enemyBullets.forEach(b => { ctx.fillStyle = b.color || "#ff0000"; ctx.shadowBlur=10; ctx.shadowColor=b.color || "#ff0000"; ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2); ctx.fill(); }); ctx.shadowBlur=0;
+ 
+            // DIBUJAR AL JUGADOR (ROBOT IDÉNTICO ORIENTADO AL MOVIMIENTO)
+            ctx.save();
+            let pxCenter = player.x + player.width / 2;
+            let pyCenter = player.y + player.height / 2;
+            ctx.translate(pxCenter, pyCenter);
+            ctx.rotate(player.angle + Math.PI / 2);
+
+            drawRobotPixelArt();
+
+            ctx.restore();
+ 
+            // JEFES (temáticos según su contexto ambiental)
+            if (currentStage === 1 && bossODS6.active) drawBossODS6(bossODS6);
+            if (currentStage === 2 && bossODS7.active) drawBossODS7(bossODS7);
+            if (currentStage === 3 && bossODS13.active) drawBossODS13(bossODS13);
+            if (currentStage === 4 && bossODS14.active) drawBossODS14(bossODS14);
+            if (currentStage === 5 && bossODS15.active) drawBossODS15(bossODS15);
+ 
+            ctx.restore();
+            if (currentStage === 0) drawMiniMap();
+
+            if (gameState === "paused") {
+                ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = "#4caf50"; ctx.font = "bold 40px 'Courier New'"; ctx.textAlign = "center";
+                ctx.fillText("PAUSA", canvas.width / 2, canvas.height / 2 - 10);
+                ctx.font = "16px 'Courier New'"; ctx.fillStyle = "#ccc";
+                ctx.fillText("Presiona el botón ⏸ o ESC para continuar", canvas.width / 2, canvas.height / 2 + 24);
+                ctx.textAlign = "left";
+            }
+        }
+ 
+        function drawMiniMap() {
+            const mmWidth = 220, mmHeight = 220; const mmX = canvas.width - mmWidth - 20, mmY = 20;
+            ctx.fillStyle = "rgba(10, 10, 10, 0.85)"; ctx.strokeStyle = "#4caf50"; ctx.lineWidth = 2; ctx.fillRect(mmX, mmY, mmWidth, mmHeight); ctx.strokeRect(mmX, mmY, mmWidth, mmHeight);
+            let scaleX = mmWidth / worldWidth, scaleY = mmHeight / worldHeight; let cellWidth = worldWidth / mapGridCols, cellHeight = worldHeight / mapGridRows;
+            for (let r = 0; r < mapGridRows; r++) { for (let c = 0; c < mapGridCols; c++) { if (exploredCells[r][c]) { ctx.fillStyle = "rgba(76, 175, 80, 0.2)"; ctx.fillRect(mmX + (c * cellWidth * scaleX), mmY + (r * cellHeight * scaleY), cellWidth * scaleX + 0.5, cellHeight * scaleY + 0.5); } } }
+            
+            ctx.fillStyle = "rgba(100, 100, 100, 0.6)"; 
+            lobbyWalls.forEach(w => { 
+                let r = Math.floor(w.y / cellHeight), c = Math.floor(w.x / cellWidth);
+                if(r >= 0 && r < mapGridRows && c >= 0 && c < mapGridCols && exploredCells[r][c]) {
+                    ctx.fillRect(mmX + w.x * scaleX, mmY + w.y * scaleY, Math.max(1, w.width * scaleX), Math.max(1, w.height * scaleY)); 
+                }
+            });
+
+            missions.forEach(m => { ctx.fillStyle = m.completed ? "rgba(255,255,255,0.3)" : m.color; ctx.fillRect(mmX + m.x * scaleX - 1.5, mmY + m.y * scaleY - 1.5, 3, 3); });
+
+            ctx.fillStyle = "#ffcc00"; ctx.fillRect(mmX + shopStation.x * scaleX, mmY + shopStation.y * scaleY, 4, 4);
+            ctx.fillStyle = "#00e5ff"; ctx.fillRect(mmX + doorODS6.x * scaleX, mmY + doorODS6.y * scaleY, 4, 4);
+            ctx.fillStyle = "#ffcc00"; ctx.fillRect(mmX + doorODS7.x * scaleX, mmY + doorODS7.y * scaleY, 4, 4);
+            ctx.fillStyle = "#ff4d4d"; ctx.fillRect(mmX + doorODS13.x * scaleX, mmY + doorODS13.y * scaleY, 4, 4);
+            ctx.fillStyle = "#7b68ee"; ctx.fillRect(mmX + doorODS14.x * scaleX, mmY + doorODS14.y * scaleY, 4, 4);
+            ctx.fillStyle = "#8bc34a"; ctx.fillRect(mmX + doorODS15.x * scaleX, mmY + doorODS15.y * scaleY, 4, 4);
+            ctx.fillStyle = "#ffffff"; ctx.beginPath(); ctx.arc(mmX + player.x * scaleX, mmY + player.y * scaleY, 3, 0, Math.PI * 2); ctx.fill();
+        }
+ 
+        function loop() { updateMissionCooldowns(); update(); draw(); requestAnimationFrame(loop); }
+        loop();
+    </script>
+</body>
+</html>
